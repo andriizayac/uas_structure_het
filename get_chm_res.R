@@ -1,3 +1,6 @@
+pkgs <- c("terra", "tidyverse", "sf")
+sapply(pkgs, require, character.only=TRUE, quietly=TRUE)
+
 f <- list.files("~/../../Volumes/az_drive/uas_2022/", pattern = "_chm_", full.names = FALSE, recursive = TRUE) |>
   lapply(function(x){str_split(pattern = "/",x)[[1]][1]}) |> unlist() 
 

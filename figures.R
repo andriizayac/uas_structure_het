@@ -8,10 +8,9 @@ ress <- read.csv("data/chm_resolutions.csv") |>
   group_by(scale) |> summarize_all(mean) |> pull(res) |> round(2)
 # ===
 
-# === load data
-dft <- read.csv("data/data_demo.csv")
-# ===
-
+# === colour palette
+colfun <- colorRampPalette(c("#25858EFF", "#FDE725FF"))
+cbcols <- colfun(64)
 
 # === Modeling results
 
@@ -28,13 +27,14 @@ map(m1.0, as.data.frame) |>
   ggplot(aes(x = scale, y = mu, group = 1)) + geom_point() + 
   geom_line() + 
   geom_errorbar(aes(ymin = l05, ymax = l95), width = 0.1) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "#101010") +
   scale_x_discrete(limits = rev, labels = rev(ress)) + 
-  labs(x = "Scale resolution, m", 
+  labs(x = "Scale, m", 
        y = expression(paste("Fire effect, ", beta))) +
   theme_bw()
-ggsave("figures/fig_1.png", width = 6, height = 4)
+ggsave("figures/fig_3a.pdf", width = 5.3, height = 3.3)
 
-# === model 2.0 - sparse model
+ # === model 2.0 - sparse model
 m2.0 <- readRDS("../wavelet_models/m2_0.rds")
 
 m2.0 |> as.data.frame() |> 
@@ -43,16 +43,23 @@ m2.0 |> as.data.frame() |>
   group_by(name) |> summarize(mean = mean(value), 
                               lo = quantile(value, probs = 0.025), 
                               hi = quantile(value, probs = 0.975)) |> mutate(res = ress) |> 
-  ggplot(aes(y = name)) + geom_point(aes(x = mean), size = 2) + 
-  geom_errorbar(aes(xmin = lo, xmax = hi, width = .1)) +
-  geom_vline(xintercept = 0, linetype = "dashed", colour = "#101010") +
-  scale_y_discrete(labels = ress ) +
-  labs(y = "Scale resolution, m", x = expression(paste("Coefficient estimate, ", beta))) +
+  ungroup() |> 
+  mutate(col = factor(as.numeric(sign(lo) == sign(hi))) ) |>
+  ggplot(aes(x = name, y = mean, group = 1)) + geom_point(size = 2) + 
+  geom_line() +
+  geom_errorbar(aes(ymin = lo, ymax = hi, width = .1)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "#101010") +
+  scale_x_discrete(limits = rev, labels = rev(ress)) +
+  scale_color_manual(values = c("gray", "black")) +
+  labs(x = "Scale, m", y = expression(paste("Effect on recruit abundance, ", beta))) +
   theme_bw()
-# ggsave("figures/fig_2.png", width = 4, height = 6)
+ggsave("figures/fig_3b.pdf", width = 5.3, height = 3.3)
 
 # === model 2.1 and 2.2 - predictive power
-acc2.1 <- read.csv("../wavelet_models/accuracy2_1.csv")
+acc2.1 <- read.csv("../wavelet_models/accuracy2_1.csv") |>
+  mutate(across(c(mae, rmse), function(x) x/(pi*5^2)))
+acc2.1tot <- read.csv("../wavelet_models/accuracy2_tot_het.csv") |> 
+  mutate(across(c(mae, rmse), function(x) x/(pi*5^2)))
 
 acc2.1 |> 
   dplyr::select(-k) |>
@@ -60,36 +67,53 @@ acc2.1 |>
   summarize_all(mean) |> ungroup() |> 
   ggplot(aes(x = scale)) + 
   geom_point(aes(y = r2)) + geom_line(aes(y = r2)) +
-  geom_line(aes(y = r2l), linetype = "dotted", size = .5) +
-  geom_line(aes(y = r2u), linetype = "dotted", size = .5)  +
-  geom_line(aes(y = mae/100), colour = "#666666", linetype = "dashed", size = 2) +
+  geom_hline(yintercept = mean(acc2.1tot$r2), linewidth = .5) +
+  geom_line(aes(y = r2l), linetype = "dotted", linewidth = .5) +
+  geom_line(aes(y = r2u), linetype = "dotted", linewidth = .5)  +
+  geom_line(aes(y = mae), colour = "#666666", linetype = "dashed", linewidth = 2) +
+  geom_hline(yintercept = mean(acc2.1tot$mae), colour = "#666666", linetype = "dashed", linewidth = .5) +
   scale_y_continuous(name = expression(paste(R^2)),
-                     sec.axis = sec_axis(~.*100, name = "Mean absulute error, N")) +
-  scale_x_reverse(name = "Scale resolution, m", breaks = 1:9, labels = ress) + 
+                     sec.axis = sec_axis(~.*1, 
+                                         name = expression(paste("Mean absulute error, N", ~m^{-2})) )) +
+  scale_x_reverse(name = "Scale, m", breaks = 1:9, labels = ress) + 
+  annotate("text", x = c(8.5), y = c(0.37), label = "Total", alpha = .7) +
   theme_bw() +
-  theme(axis.title.y.right = element_text(colour = "#666666", face = "bold"))
-# ggsave("figures/fig_3a.png", width = 6, height = 4)
+  theme(axis.title.y.right = element_text(colour = "#666666", face = "bold")) 
+ggsave("figures/fig_4a.pdf", width = 5.5, height = 3.5)
 
 # === model 2.2 - predictive power
-acc2.2 <- read.csv("../wavelet_models/accuracy2_2.csv")
+acc2.2 <- read.csv("../wavelet_models/accuracy2_2.csv") |> 
+  mutate(across(c(mae, rmse), function(x) x/(pi*5^2)))
+acc2.2tot <- read.csv("../wavelet_models/accuracy2_tot_het.csv") |> 
+  mutate(across(c(mae, rmse), function(x) x/(pi*5^2)))
 
 acc2.2 |> 
   dplyr::select(-k) |>
   group_by(scale) |>
   summarize_all(mean) |> ungroup() |> 
-  ggplot(aes(x = scale)) + 
+  ggplot(aes(x = scale )) + 
+  # reference line
+  geom_hline(yintercept = mean(acc2.2tot$r2)) +
   geom_point(aes(y = r2)) + geom_line(aes(y = r2)) +
-  geom_line(aes(y = r2l), linetype = "dotted", size = .5) +
-  geom_line(aes(y = r2u), linetype = "dotted", size = .5)  +
-  geom_line(aes(y = mae/100), colour = "#666666", linetype = "dashed", size = 2) +
+  geom_line(aes(y = r2l), linetype = "dotted", linewidth = .5) +
+  geom_line(aes(y = r2u), linetype = "dotted", linewidth = .5)  +
+  # secondary axis with MAE
+  geom_line(aes(y = mae/1.2), colour = "#666666", linetype = "dashed", linewidth = 2) +
+  geom_hline(yintercept = mean(acc2.2tot$mae)/1.2, colour = "#666666", linetype = "dashed", linewidth = .5) +
   scale_y_continuous(name = expression(paste(R^2)),
-                     sec.axis = sec_axis(~.*100, name = "Mean absulute error, N")) +
-  scale_x_reverse(name = "Scale resolution, m", breaks = 1:9, labels = ress) + 
+                     sec.axis = sec_axis(~.*1.2, 
+                                         name = expression(paste("Mean absulute error, N", ~m^{-2})) )) +
+  scale_x_reverse(name = "Scale, m", breaks = 1:9, labels = ress) + 
+  annotate("text", x = c(1.3), y = c(0.41), label = "Total", alpha = .7) +
   theme_bw() +
   theme(axis.title.y.right = element_text(colour = "#666666", face = "bold"))
-# ggsave("figures/fig_3b.png", width = 6, height = 4)
+ggsave("figures/fig_4b.png", width = 5.5, height = 3.5)
 
-# === model 3.0 - inference
+# === model 3.0 - Inferential part
+# === load data
+dft <- read.csv("../wavelet_models/data_demo.csv")
+# ===
+
 m3.0 <- readRDS("../wavelet_models/m3_1.rds")
 pars <- m3.0 |> as.data.frame() |> dplyr::select(-b_Scale_2sd)
 
@@ -128,8 +152,8 @@ f4b <- df|>
              aes(x = Scale_1sd, y = log(juv)), inherit.aes = FALSE, alpha = .1) +
   geom_ribbon(aes(ymin = yhat.lo.lo, ymax = yhat.lo.hi), fill = "#482173FF", alpha = .33) +
   geom_ribbon(aes(ymin = yhat.hi.lo, ymax = yhat.hi.hi), fill = "#51C56AFF", alpha = .33) +
-  geom_line(aes(y = yhat.lo.mu), colour = "#482173FF", size = 1) +
-  geom_line(aes(y = yhat.hi.mu), colour = "#51C56AFF",  size = 1) +
+  geom_line(aes(y = yhat.lo.mu), colour = "#482173FF", linewidth = 1) +
+  geom_line(aes(y = yhat.hi.mu), colour = "#51C56AFF",  linewidth = 1) +
   scale_colour_manual(name = "N, mature", values =  cols) +
   labs(x = expression(paste("log[ Heterogeneity, ", Sigma~bold(D)[1] ^2,"(",bold(x),",",bold(y),") ]" )), 
        y = "log[ N, juvenile ]") +
@@ -187,13 +211,39 @@ for(i in (wn$nlevels-1):0 ) {
 }
 
 par(mfrow = c(4,2), mai = c(0,0,0,0))
-for(i in 2:length(wnh)){ plot(wnh[[i]])}
+for(i in 2:length(wnh)){ plot(wnh[[i]], col = cbcols)}
 
-png('figures/archive/fig2b6.png', height = 320, width = 360, units = "px")
-plot(wnh[[3]], axes = FALSE, mar = c(1.1, 1.1, 1.1, 4.1))
-
+png('figures/archive/fig3b4.png', height = 320, width = 390, units = "px")
+# export chms: fig2b[1:3], at aggregate levels (4, 16, 128)
+# plot(aggregate(e.rast, fact = 128), col = cbcols, axes = FALSE, mar = c(1.1, .5, 1.1, 4.75), plg = list(cex = 1.5) )
+# export transforms: fig2b[4:6] with whn[[3, 6, 8]]
+plot(wnh[[8]], col = cbcols, axes = FALSE, mar = c(1.1, .5, 1.1, 4.75), plg = list(cex = 1.5))
 dev.off()
 
 
-imwr( nullevels(wn, levelstonull = c(2) )) |> rast() |> plot()
 
+
+# imwr( nullevels(wn, levelstonull = c(2) )) |> rast() |> plot()
+
+# === extract a single plot as inlet
+cellid <- 35
+cells <- st_read("data/cells.geojson") |> 
+  filter(site == "Cold", cid == cellid) |> 
+  st_buffer(5.1) |> st_transform(32611) 
+plants <- st_read("../plant_data.geojson") |>
+  filter(site == "Cold", CID == cellid, Class == "Shrub", Ht_gt_25 == 0) |> 
+  st_transform(32611) |> 
+  st_intersection(cells)
+
+chm <- rast("~/../../Volumes/az_drive/uas_2022/Cold/Cold_20220610_chm_wgs84utm11n.tif") |> 
+  crop(st_as_sfc(st_bbox(cells)) ) |> mask(cells)
+  
+
+# pdf("~/Downloads/temp_fig.pdf")
+par(mai = c(0,0,0,0))
+plot(chm, col = cbcols, legend = FALSE, axes = FALSE)
+plot(plants$geometry, pch = 19, add = TRUE)
+plot(cells$geometry, border = "#7030A0", lwd = 5, add = TRUE)
+# plot(st_buffer(cells, .01)$geometry, add = TRUE, lwd = 2, border = "white")
+dev.off()
+# ===
